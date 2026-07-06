@@ -1,0 +1,89 @@
+name: Build bootloader
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Build inside Ubuntu 21.10 "Impish" to pin the exact toolchain:
+    #   gcc-arm-none-eabi 15:9-2019-q4-0ubuntu2
+    #   https://packages.ubuntu.com/impish/gcc-arm-none-eabi
+    container:
+      image: ubuntu:21.10
+
+    env:
+      # PAT used to fetch the nRF SDK from the GitHub release asset.
+      PAT: ${{ secrets.PAT }}
+
+    steps:
+      - name: Point apt at old-releases (Impish is EOL)
+        run: |
+          set -eux
+          sed -i \
+            -e 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' \
+            -e 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list
+
+      - name: Ensure Ubuntu has basic tools
+        run: |
+          set -eux
+          apt-get update -qq
+          apt-get install -y software-properties-common
+          apt-get install -y build-essential
+          apt-get install -y git
+          apt-get install -y curl
+          apt-get install -y unzip
+
+      - name: Install GCC ARM compiler
+        run: |
+          set -eux
+          apt-get install -y gcc-arm-none-eabi
+          arm-none-eabi-gcc --version
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch nRF SDK v16
+        run: |
+          set -eux
+          # Resolve the redirect to the AWS asset URL
+          url=$(curl -H "Authorization: token $PAT" \
+                     -H "Accept: application/octet-stream" \
+                     "https://api.github.com/repos/microbit-foundation/v2-bootloader/releases/assets/26860208" \
+                     -w "%{url_effective}\n" -I -L -s -o /dev/null)
+          # Download from AWS
+          curl -H "Accept: application/octect-stream" "$url" > nrf.zip
+          unzip -q nrf.zip
+
+      - name: Configure nRF SDK toolchain path
+        run: |
+          set -eux
+          rm nRF5SDK/components/toolchain/gcc/Makefile.posix
+          printf 'GNU_INSTALL_ROOT ?= \r\nGNU_VERSION ?= 7.3.1\r\nGNU_PREFIX ?= arm-none-eabi\r\n' \
+            > nRF5SDK/components/toolchain/gcc/Makefile.posix
+
+      - name: Build micro-ecc
+        run: |
+          set -eux
+          git clone https://github.com/kmackay/micro-ecc nRF5SDK/external/micro-ecc/micro-ecc
+          make -C nRF5SDK/external/micro-ecc/nrf52hf_armgcc/armgcc
+
+      - name: Build bootloader
+        run: |
+          set -eux
+          make -C bootloader/microbit/armgcc bob
+
+      - name: Collect artifact
+        run: |
+          set -eux
+          mkdir -p artifacts
+          cp bootloader/microbit/armgcc/bootloader_s113.o artifacts/bootloader.o
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootloader
+          path: artifacts/bootloader.o
