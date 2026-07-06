@@ -14,10 +14,6 @@ jobs:
     container:
       image: ubuntu:21.10
 
-    env:
-      # PAT used to fetch the nRF SDK from the GitHub release asset.
-      PAT: ${{ secrets.PAT }}
-
     steps:
       - name: Point apt at old-releases (Impish is EOL)
         run: |
@@ -48,19 +44,13 @@ jobs:
 
       - name: Fetch nRF SDK v16
         run: |
-          set -eu
-          if [ -z "${PAT:-}" ]; then
-            echo "::error::The PAT secret is empty. Add a repo secret named PAT with access to microbit-foundation/v2-bootloader."
-            exit 1
-          fi
-          set -x
-          # Follow the API redirect and download the asset in one step, failing on HTTP errors.
+          set -eux
+          # Public release asset, no auth required.
+          # https://github.com/microbit-foundation/v2-bootloader/releases/tag/sdk16
           curl --fail-with-body -L \
-               -H "Authorization: token $PAT" \
-               -H "Accept: application/octet-stream" \
-               "https://api.github.com/repos/microbit-foundation/v2-bootloader/releases/assets/26860208" \
+               "https://github.com/microbit-foundation/v2-bootloader/releases/download/sdk16/nRF5SDK.zip" \
                -o nrf.zip
-          # Sanity-check: make sure we actually got a zip, not a JSON error body.
+          # Sanity-check: make sure we actually got a zip, not an HTML/JSON error body.
           if ! unzip -tq nrf.zip > /dev/null 2>&1; then
             echo "::error::Downloaded nrf.zip is not a valid zip archive. Contents:"
             head -c 500 nrf.zip
