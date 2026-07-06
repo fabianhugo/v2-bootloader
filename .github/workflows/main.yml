@@ -47,7 +47,7 @@ jobs:
           set -eux
           # Public release asset, no auth required.
           # https://github.com/microbit-foundation/v2-bootloader/releases/tag/sdk16
-          curl --fail-with-body -L \
+          curl -fL \
                "https://github.com/microbit-foundation/v2-bootloader/releases/download/sdk16/nRF5SDK.zip" \
                -o nrf.zip
           # Sanity-check: make sure we actually got a zip, not an HTML/JSON error body.
