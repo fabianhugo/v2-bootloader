@@ -48,14 +48,24 @@ jobs:
 
       - name: Fetch nRF SDK v16
         run: |
-          set -eux
-          # Resolve the redirect to the AWS asset URL
-          url=$(curl -H "Authorization: token $PAT" \
-                     -H "Accept: application/octet-stream" \
-                     "https://api.github.com/repos/microbit-foundation/v2-bootloader/releases/assets/26860208" \
-                     -w "%{url_effective}\n" -I -L -s -o /dev/null)
-          # Download from AWS
-          curl -H "Accept: application/octect-stream" "$url" > nrf.zip
+          set -eu
+          if [ -z "${PAT:-}" ]; then
+            echo "::error::The PAT secret is empty. Add a repo secret named PAT with access to microbit-foundation/v2-bootloader."
+            exit 1
+          fi
+          set -x
+          # Follow the API redirect and download the asset in one step, failing on HTTP errors.
+          curl --fail-with-body -L \
+               -H "Authorization: token $PAT" \
+               -H "Accept: application/octet-stream" \
+               "https://api.github.com/repos/microbit-foundation/v2-bootloader/releases/assets/26860208" \
+               -o nrf.zip
+          # Sanity-check: make sure we actually got a zip, not a JSON error body.
+          if ! unzip -tq nrf.zip > /dev/null 2>&1; then
+            echo "::error::Downloaded nrf.zip is not a valid zip archive. Contents:"
+            head -c 500 nrf.zip
+            exit 1
+          fi
           unzip -q nrf.zip
 
       - name: Configure nRF SDK toolchain path
