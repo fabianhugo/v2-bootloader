@@ -1,8 +1,6 @@
 name: Build bootloader (Ubuntu 20.04 / gcc 9-2019-q4)
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:

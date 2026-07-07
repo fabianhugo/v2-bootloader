@@ -1,4 +1,4 @@
-name: Build bootloader
+name: Build bootloader (Ubuntu 22.04 / gcc 10.3-2021.07)
 
 on:
   push:
@@ -8,21 +8,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Build inside Ubuntu 21.10 "Impish" to pin the exact toolchain:
-    #   gcc-arm-none-eabi 15:9-2019-q4-0ubuntu2
-    #   https://packages.ubuntu.com/impish/gcc-arm-none-eabi
+    # Build inside Ubuntu 22.04 "Jammy" to pin the exact toolchain:
+    #   gcc-arm-none-eabi 15:10.3-2021.07-4
+    #   https://packages.ubuntu.com/jammy/gcc-arm-none-eabi
     container:
-      image: ubuntu:21.10
+      image: ubuntu:22.04
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
 
     steps:
-      - name: Point apt at old-releases (Impish is EOL)
-        run: |
-          set -eux
-          sed -i \
-            -e 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' \
-            -e 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' \
-            /etc/apt/sources.list
-
       - name: Ensure Ubuntu has basic tools
         run: |
           set -eux
@@ -36,7 +31,7 @@ jobs:
       - name: Install GCC ARM compiler
         run: |
           set -eux
-          apt-get install -y gcc-arm-none-eabi
+          apt-get install -y gcc-arm-none-eabi=15:10.3-2021.07-4
           arm-none-eabi-gcc --version
 
       - name: Checkout
@@ -85,5 +80,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bootloader
+          name: bootloader-ubuntu2204-gcc10
           path: artifacts/bootloader.o
