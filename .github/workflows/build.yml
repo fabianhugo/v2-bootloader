@@ -1,8 +1,6 @@
 name: Build bootloader
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 # Reproducible build of the deployed bootloader. Verified byte-for-byte identical to
