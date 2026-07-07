@@ -1,19 +1,28 @@
-name: Build bootloader (Ubuntu 22.04 / gcc 10.3-2021.07)
+name: Build bootloader
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
+# Reproducible build of the deployed bootloader. Verified byte-for-byte identical to
+# the shipped image with this exact combination:
+#   OS         : Ubuntu 20.04 "Focal"
+#   compiler   : gcc-arm-none-eabi 15:9-2019-q4-0ubuntu1
+#   micro-ecc  : commit b335ee812bfcca4cd3fb0e2a436aab39553a555a
+#   nRF SDK    : v16 (sdk16 release asset)
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Build inside Ubuntu 22.04 "Jammy" to pin the exact toolchain:
-    #   gcc-arm-none-eabi 15:10.3-2021.07-4
-    #   https://packages.ubuntu.com/jammy/gcc-arm-none-eabi
     container:
-      image: ubuntu:22.04
+      image: ubuntu:20.04
 
     env:
       DEBIAN_FRONTEND: noninteractive
+      MICRO_ECC_COMMIT: b335ee812bfcca4cd3fb0e2a436aab39553a555a
+      # Committed reference image to check reproducibility against.
+      # Leave the file absent to skip the check.
+      REFERENCE_O: bootloader_original.o
 
     steps:
       - name: Ensure Ubuntu has basic tools
@@ -29,7 +38,7 @@ jobs:
       - name: Install GCC ARM compiler
         run: |
           set -eux
-          apt-get install -y gcc-arm-none-eabi=15:10.3-2021.07-4
+          apt-get install -y gcc-arm-none-eabi=15:9-2019-q4-0ubuntu1
           arm-none-eabi-gcc --version
 
       - name: Checkout
@@ -62,6 +71,9 @@ jobs:
         run: |
           set -eux
           git clone https://github.com/kmackay/micro-ecc nRF5SDK/external/micro-ecc/micro-ecc
+          # Pin micro-ecc to a fixed commit for reproducibility.
+          git -C nRF5SDK/external/micro-ecc/micro-ecc checkout "$MICRO_ECC_COMMIT"
+          git -C nRF5SDK/external/micro-ecc/micro-ecc rev-parse HEAD
           make -C nRF5SDK/external/micro-ecc/nrf52hf_armgcc/armgcc
 
       - name: Build bootloader
@@ -75,8 +87,29 @@ jobs:
           mkdir -p artifacts
           cp bootloader/microbit/armgcc/bootloader_s113.o artifacts/bootloader.o
 
+      - name: Verify reproducibility against reference
+        run: |
+          set -eu
+          if [ ! -f "$REFERENCE_O" ]; then
+            echo "::warning::Reference $REFERENCE_O not found — skipping reproducibility check."
+            exit 0
+          fi
+          # Compare the raw firmware image (the .bootloader section), not the ELF wrapper.
+          arm-none-eabi-objcopy -O binary --only-section=.bootloader artifacts/bootloader.o built.bin
+          arm-none-eabi-objcopy -O binary --only-section=.bootloader "$REFERENCE_O"      ref.bin
+          if cmp -s built.bin ref.bin; then
+            echo "Reproducibility check passed: build matches $REFERENCE_O byte-for-byte."
+          else
+            echo "::error::Build differs from $REFERENCE_O ($(cmp -l built.bin ref.bin | wc -l) bytes)."
+            cmp -l built.bin ref.bin | head
+            exit 1
+          fi
+
       - name: Upload artifact
+        # Always upload — even if the reproducibility check failed — so a mismatching
+        # build can still be downloaded and inspected.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bootloader-ubuntu2204-gcc10
+          name: bootloader
           path: artifacts/bootloader.o

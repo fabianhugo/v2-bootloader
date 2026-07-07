@@ -31,6 +31,13 @@ bootloader - from examples/dfu/secure_bootloader <br />
 testapp - from examples/ble_peripheral/ble_app_buttonless_dfu <br />
 
 
+### Byte-identical (reproducible) build <br />
+The deployed bootloader can be reproduced byte-for-byte with this exact combination: <br />
+Ubuntu 20.04, gcc-arm-none-eabi `15:9-2019-q4-0ubuntu1`, and micro-ecc pinned to commit `b335ee812bfcca4cd3fb0e2a436aab39553a555a`. <br />
+The GitHub Actions workflow [.github/workflows/build.yml](.github/workflows/build.yml) builds with this configuration and fails if the result differs from the committed reference `bootloader_original.o`. <br />
+Note: the compiler's Ubuntu packaging revision matters (`-0ubuntu1` reproduces exactly; the `-0ubuntu2` from Ubuntu 21.10 does not), and micro-ecc must be pinned because it is otherwise cloned at an unpredictable HEAD. <br />
+
+
 ### getting started <br />
 Clone this repo and download nRF5SDK as below. <br />
 
