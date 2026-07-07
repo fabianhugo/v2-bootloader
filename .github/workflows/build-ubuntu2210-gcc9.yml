@@ -1,8 +1,6 @@
 name: Build bootloader (Ubuntu 22.04 / gcc 10.3-2021.07)
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
