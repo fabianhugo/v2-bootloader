@@ -1,0 +1,89 @@
+name: Build bootloader
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Build inside Ubuntu 21.10 "Impish" to pin the exact toolchain:
+    #   gcc-arm-none-eabi 15:9-2019-q4-0ubuntu2
+    #   https://packages.ubuntu.com/impish/gcc-arm-none-eabi
+    container:
+      image: ubuntu:21.10
+
+    steps:
+      - name: Point apt at old-releases (Impish is EOL)
+        run: |
+          set -eux
+          sed -i \
+            -e 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' \
+            -e 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list
+
+      - name: Ensure Ubuntu has basic tools
+        run: |
+          set -eux
+          apt-get update -qq
+          apt-get install -y software-properties-common
+          apt-get install -y build-essential
+          apt-get install -y git
+          apt-get install -y curl
+          apt-get install -y unzip
+
+      - name: Install GCC ARM compiler
+        run: |
+          set -eux
+          apt-get install -y gcc-arm-none-eabi
+          arm-none-eabi-gcc --version
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch nRF SDK v16
+        run: |
+          set -eux
+          # Public release asset, no auth required.
+          # https://github.com/microbit-foundation/v2-bootloader/releases/tag/sdk16
+          curl -fL \
+               "https://github.com/microbit-foundation/v2-bootloader/releases/download/sdk16/nRF5SDK.zip" \
+               -o nrf.zip
+          # Sanity-check: make sure we actually got a zip, not an HTML/JSON error body.
+          if ! unzip -tq nrf.zip > /dev/null 2>&1; then
+            echo "::error::Downloaded nrf.zip is not a valid zip archive. Contents:"
+            head -c 500 nrf.zip
+            exit 1
+          fi
+          unzip -q nrf.zip
+
+      - name: Configure nRF SDK toolchain path
+        run: |
+          set -eux
+          rm nRF5SDK/components/toolchain/gcc/Makefile.posix
+          printf 'GNU_INSTALL_ROOT ?= \r\nGNU_VERSION ?= 7.3.1\r\nGNU_PREFIX ?= arm-none-eabi\r\n' \
+            > nRF5SDK/components/toolchain/gcc/Makefile.posix
+
+      - name: Build micro-ecc
+        run: |
+          set -eux
+          git clone https://github.com/kmackay/micro-ecc nRF5SDK/external/micro-ecc/micro-ecc
+          make -C nRF5SDK/external/micro-ecc/nrf52hf_armgcc/armgcc
+
+      - name: Build bootloader
+        run: |
+          set -eux
+          make -C bootloader/microbit/armgcc bob
+
+      - name: Collect artifact
+        run: |
+          set -eux
+          mkdir -p artifacts
+          cp bootloader/microbit/armgcc/bootloader_s113.o artifacts/bootloader.o
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootloader
+          path: artifacts/bootloader.o
